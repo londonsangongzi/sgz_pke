@@ -15,7 +15,7 @@ setup(name='sgz-pke',
           'networkx',
           'numpy',
           'scipy',
-          #'spacy', for reintall 
+          'spacy',
           'six',
           'sklearn',
           'unidecode',
