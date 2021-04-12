@@ -1,6 +1,6 @@
 from distutils.core import setup
 
-setup(name='pke',
+setup(name='sgz-pke',
       version='1.8.1',
       description='Python Keyphrase Extraction module',
       author='pke contributors',
@@ -9,7 +9,7 @@ setup(name='pke',
       packages=['pke', 'pke.unsupervised', 'pke.supervised',
                 'pke.supervised.feature_based', 'pke.unsupervised.graph_based',
                 'pke.unsupervised.statistical', 'pke.supervised.neural_based'],
-      url="https://github.com/boudinfl/pke",
+      url="https://github.com/londonsangongzi/sgz_pke",
       install_requires=[
           'nltk',
           'networkx',
@@ -22,5 +22,5 @@ setup(name='pke',
           'future',
           'joblib'
       ],
-      package_data={'pke': ['models/*.pickle', 'models/*.gz']}
+      package_data={'sgz_pke': ['models/*.pickle', 'models/*.gz']}
       )
