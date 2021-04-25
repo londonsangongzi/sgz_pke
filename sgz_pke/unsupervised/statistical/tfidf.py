@@ -12,8 +12,8 @@ import math
 import string
 import logging
 
-from pke.base import LoadFile
-from pke.utils import load_document_frequency_file
+from sgz_pke.base import LoadFile
+from sgz_pke.utils import load_document_frequency_file
 
 
 class TfIdf(LoadFile):
@@ -22,10 +22,10 @@ class TfIdf(LoadFile):
     Parameterized example::
 
         import string
-        import pke
+        import sgz_pke
 
         # 1. create a TfIdf extractor.
-        extractor = pke.unsupervised.TfIdf()
+        extractor = sgz_pke.unsupervised.TfIdf()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',
@@ -37,7 +37,7 @@ class TfIdf(LoadFile):
                                       stoplist=list(string.punctuation))
 
         # 4. weight the candidates using a `tf` x `idf`
-        df = pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
+        df = sgz_pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
         extractor.candidate_weighting(df=df)
 
         # 5. get the 10-highest scored candidates as keyphrases

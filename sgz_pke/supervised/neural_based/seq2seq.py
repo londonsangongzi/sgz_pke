@@ -9,7 +9,7 @@ Implementation of the Seq2Seq model for automatic keyphrase extraction.
 from __future__ import absolute_import
 from __future__ import print_function
 
-from pke.supervised.api import SupervisedLoadFile
+from sgz_pke.supervised.api import SupervisedLoadFile
 
 
 class Seq2Seq(SupervisedLoadFile):

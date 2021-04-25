@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from pke.unsupervised import SingleRank
+from sgz_pke.unsupervised import SingleRank
 
 import networkx as nx
 from collections import defaultdict
@@ -29,7 +29,7 @@ class PositionRank(SingleRank):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
 
         # define the valid Part-of-Speeches to occur in the graph
         pos = {'NOUN', 'PROPN', 'ADJ'}
@@ -38,7 +38,7 @@ class PositionRank(SingleRank):
         grammar = "NP: {<ADJ>*<NOUN|PROPN>+}"
 
         # 1. create a PositionRank extractor.
-        extractor = pke.unsupervised.PositionRank()
+        extractor = sgz_pke.unsupervised.PositionRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',

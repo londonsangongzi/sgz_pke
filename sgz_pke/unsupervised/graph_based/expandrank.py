@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import absolute_import
 
-from pke.unsupervised import SingleRank
-from pke.base import LoadFile
+from sgz_pke.unsupervised import SingleRank
+from sgz_pke.base import LoadFile
 
 import networkx as nx
 import logging
@@ -30,12 +30,12 @@ class ExpandRank(SingleRank):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
         import string
         from nltk.corpus import stopwords
 
         # 1. create an ExpandRank extractor.
-        extractor = pke.unsupervised.ExpandRank()
+        extractor = sgz_pke.unsupervised.ExpandRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input.xml')

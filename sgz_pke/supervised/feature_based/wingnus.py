@@ -23,8 +23,8 @@ import numpy as np
 from joblib import dump as dump_model
 from sklearn.naive_bayes import MultinomialNB
 
-from pke.supervised.api import SupervisedLoadFile
-from pke.utils import load_document_frequency_file
+from sgz_pke.supervised.api import SupervisedLoadFile
+from sgz_pke.utils import load_document_frequency_file
 
 
 class WINGNUS(SupervisedLoadFile):
@@ -32,10 +32,10 @@ class WINGNUS(SupervisedLoadFile):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
 
         # 1. create a WINGNUS extractor.
-        extractor = pke.supervised.WINGNUS()
+        extractor = sgz_pke.supervised.WINGNUS()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input.xml')
@@ -44,7 +44,7 @@ class WINGNUS(SupervisedLoadFile):
         extractor.candidate_selection()
 
         # 4. classify candidates as keyphrase or not keyphrase.
-        df = pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
+        df = sgz_pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
         model_file = 'path/to/wingnus_model'
         extractor.candidate_weighting(self, model_file=model_file, df=df)
 

@@ -18,7 +18,7 @@ from __future__ import print_function
 
 import networkx as nx
 
-from pke.unsupervised.graph_based.textrank import TextRank
+from sgz_pke.unsupervised.graph_based.textrank import TextRank
 
 
 class SingleRank(TextRank):
@@ -29,13 +29,13 @@ class SingleRank(TextRank):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
 
         # define the set of valid Part-of-Speeches
         pos = {'NOUN', 'PROPN', 'ADJ'}
 
         # 1. create a SingleRank extractor.
-        extractor = pke.unsupervised.SingleRank()
+        extractor = sgz_pke.unsupervised.SingleRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',

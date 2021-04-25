@@ -8,7 +8,7 @@ from __future__ import absolute_import
 import os
 import six
 
-from pke.base import LoadFile
+from sgz_pke.base import LoadFile
 from sklearn.preprocessing import MinMaxScaler
 from joblib import load as load_model
 

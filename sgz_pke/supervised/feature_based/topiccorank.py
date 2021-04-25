@@ -19,8 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from pke.unsupervised import TopicRank
-from pke.utils import load_references
+from sgz_pke.unsupervised import TopicRank
+from sgz_pke.utils import load_references
 
 from itertools import combinations
 from collections import defaultdict
@@ -34,12 +34,12 @@ class TopicCoRank(TopicRank):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
         import string
         from nltk.corpus import stopwords
 
         # 1. create a TopicCoRank extractor.
-        extractor = pke.unsupervised.TopicCoRank()
+        extractor = sgz_pke.unsupervised.TopicCoRank()
 
         # 2. load the content of the document.
        extractor.load_document(input='path/to/input.xml')

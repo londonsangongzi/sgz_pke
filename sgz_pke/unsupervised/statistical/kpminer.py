@@ -20,8 +20,8 @@ import math
 import string
 import logging
 
-from pke.base import LoadFile
-from pke.utils import load_document_frequency_file
+from sgz_pke.base import LoadFile
+from sgz_pke.utils import load_document_frequency_file
 
 
 class KPMiner(LoadFile):
@@ -29,10 +29,10 @@ class KPMiner(LoadFile):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
 
         # 1. create a KPMiner extractor. 
-        extractor = pke.unsupervised.KPMiner()
+        extractor = sgz_pke.unsupervised.KPMiner()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',
@@ -49,7 +49,7 @@ class KPMiner(LoadFile):
         extractor.candidate_selection(lasf=lasf, cutoff=cutoff)
 
         # 4. weight the candidates using KPMiner weighting function.
-        df = pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
+        df = sgz_pke.load_document_frequency_file(input_file='path/to/df.tsv.gz')
         alpha = 2.3
         sigma = 3.0
         extractor.candidate_weighting(df=df, alpha=alpha, sigma=sigma)

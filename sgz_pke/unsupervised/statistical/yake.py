@@ -25,7 +25,7 @@ from collections import defaultdict
 import numpy
 from nltk.metrics import edit_distance
 
-from pke.base import LoadFile
+from sgz_pke.base import LoadFile
 
 
 class YAKE(LoadFile):
@@ -33,11 +33,11 @@ class YAKE(LoadFile):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
         from nltk.corpus import stopwords
 
         # 1. create a YAKE extractor.
-        extractor = pke.unsupervised.YAKE()
+        extractor = sgz_pke.unsupervised.YAKE()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',

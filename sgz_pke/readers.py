@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Readers for the pke module."""
+"""Readers for the sgz_pke module."""
 
 import os
 import sys
@@ -10,8 +10,8 @@ import logging
 import xml.etree.ElementTree as etree
 import spacy
 
-from pke.data_structures import Document
-
+from sgz_pke.data_structures import Document
+from collections import Counter
 
 class Reader(object):
     def read(self, path):
@@ -142,6 +142,21 @@ class RawTextReader(Reader):
         if language is None:
             self.language = 'en'
 
+        self.spacy_doc = None
+    
+    def get_name_entities(self):
+        if self.spacy_doc:
+            ne = list(set([X.text for X in self.spacy_doc.ents]))
+            #sort by num of words --> longest_sequence_selection() 处理时先考虑字数多的name entity
+            ne.sort(key=lambda x: len(x.split()), reverse=True)
+            ne_label_dict = {}
+            for w in ne:
+                r_count = Counter([X.label_ for X in self.spacy_doc.ents if X.text==w])
+                ne_label_dict[w] = r_count.most_common()[0][0]
+            return ne,ne_label_dict
+        else:
+            return []
+
     def read(self, text, **kwargs):
         """Read the input file and use spacy to pre-process.
 
@@ -185,10 +200,10 @@ class RawTextReader(Reader):
             spacy_model.add_pipe(sentencizer)
 
         spacy_model = fix_spacy_for_french(spacy_model)
-        spacy_doc = spacy_model(text)
+        self.spacy_doc = spacy_model(text)
 
         sentences = []
-        for sentence_id, sentence in enumerate(spacy_doc.sents):
+        for sentence_id, sentence in enumerate(self.spacy_doc.sents):
             sentences.append({
                 "words": [token.text for token in sentence],
                 "lemmas": [token.lemma_ for token in sentence],

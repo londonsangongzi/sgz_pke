@@ -21,7 +21,7 @@ import logging
 
 import networkx as nx
 
-from pke.base import LoadFile
+from sgz_pke.base import LoadFile
 
 
 class TextRank(LoadFile):
@@ -39,13 +39,13 @@ class TextRank(LoadFile):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
 
         # define the set of valid Part-of-Speeches
         pos = {'NOUN', 'PROPN', 'ADJ'}
 
         # 1. create a TextRank extractor.
-        extractor = pke.unsupervised.TextRank()
+        extractor = sgz_pke.unsupervised.TextRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',
@@ -160,7 +160,7 @@ class TextRank(LoadFile):
         # generate the phrases from the T-percent top ranked words
         if top_percent is not None:
 
-            # warn user as this is not the pke way of doing it
+            # warn user as this is not the sgz_pke way of doing it
             logging.warning("Candidates are generated using {}-top".format(
                             top_percent))
 

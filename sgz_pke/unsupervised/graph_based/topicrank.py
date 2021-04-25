@@ -24,7 +24,7 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 
-from pke.base import LoadFile
+from sgz_pke.base import LoadFile
 
 
 class TopicRank(LoadFile):
@@ -32,12 +32,12 @@ class TopicRank(LoadFile):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
         import string
         from nltk.corpus import stopwords
 
         # 1. create a TopicRank extractor.
-        extractor = pke.unsupervised.TopicRank()
+        extractor = sgz_pke.unsupervised.TopicRank()
 
         # 2. load the content of the document.
        extractor.load_document(input='path/to/input.xml')
@@ -118,16 +118,21 @@ class TopicRank(LoadFile):
             for w in v.lexical_form:
                 dim.add(w)
         dim = list(dim)
-
+        
         # vectorize the candidates Python 2/3 + sort for random issues
         C = list(self.candidates)  # .keys()
         C.sort()
-
+        
         X = np.zeros((len(C), len(dim)))
         for i, k in enumerate(C):
             for w in self.candidates[k].lexical_form:
                 X[i, dim.index(w)] += 1
-
+        """
+        print('   ---   ---   ---')
+        print('dim=',len(dim),dim)        
+        print('C=list(self.candidates)=',len(C),C)
+        print(X)
+        """
         return C, X
 
     def topic_clustering(self, threshold=0.74, method='average'):
@@ -150,12 +155,15 @@ class TopicRank(LoadFile):
 
         # compute the distance matrix
         Y = pdist(X, 'jaccard')
+        #print(Y)
 
         # compute the clusters
         Z = linkage(Y, method=method)
+        #print(Z)
 
         # form flat clusters
         clusters = fcluster(Z, t=threshold, criterion='distance')
+        #print(clusters)
 
         # for each topic identifier
         for cluster_id in range(1, max(clusters) + 1):

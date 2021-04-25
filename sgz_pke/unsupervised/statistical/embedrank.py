@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-from pke import LoadFile
+from sgz_pke import LoadFile
 
 
 class EmbedRank(LoadFile):
@@ -14,10 +14,10 @@ class EmbedRank(LoadFile):
     Parameterized example::
 
         import string
-        import pke
+        import sgz_pke
 
         # 1. create an EmbedRank extractor.
-        extractor = pke.unsupervised.EmbedRank()
+        extractor = sgz_pke.unsupervised.EmbedRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input',

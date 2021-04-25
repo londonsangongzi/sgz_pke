@@ -24,7 +24,7 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 
-from pke.unsupervised import TopicRank
+from sgz_pke.unsupervised import TopicRank
 
 
 class MultipartiteRank(TopicRank):
@@ -32,12 +32,12 @@ class MultipartiteRank(TopicRank):
 
     Parameterized example::
 
-        import pke
+        import sgz_pke
         import string
         from nltk.corpus import stopwords
 
         # 1. create a MultipartiteRank extractor.
-        extractor = pke.unsupervised.MultipartiteRank()
+        extractor = sgz_pke.unsupervised.MultipartiteRank()
 
         # 2. load the content of the document.
         extractor.load_document(input='path/to/input.xml')

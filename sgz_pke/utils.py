@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Useful functions for the pke module."""
+"""Useful functions for the sgz_pke module."""
 
 from __future__ import division
 from __future__ import absolute_import
@@ -21,7 +21,7 @@ import logging
 from itertools import combinations, product
 from collections import defaultdict
 
-from pke.base import LoadFile, get_stopwords, get_stemmer_func
+from sgz_pke.base import LoadFile, get_stopwords, get_stemmer_func
 
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation

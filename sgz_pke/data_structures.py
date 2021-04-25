@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Data structures for the pke module."""
+"""Data structures for the sgz_pke module."""
 
 
 class Sentence(object):

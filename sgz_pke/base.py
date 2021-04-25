@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-"""Base classes for the pke module."""
+"""Base classes for the sgz_pke module."""
 
 from collections import defaultdict
 
-from pke.data_structures import Candidate, Document
-from pke.readers import MinimalCoreNLPReader, RawTextReader
+from sgz_pke.data_structures import Candidate, Document
+from sgz_pke.readers import MinimalCoreNLPReader, RawTextReader
 
 from nltk import RegexpParser
 from nltk.corpus import stopwords
@@ -23,8 +23,10 @@ from six import string_types
 
 from builtins import str
 
+import sgz_modules.constant as sgzconstant
+from collections import Counter
 
-# The language management should be in `pke.utils` but it would create a circular import.
+# The language management should be in `sgz_pke.utils` but it would create a circular import.
 
 get_alpha_2 = lambda l: LANGUAGE_CODE_BY_NAME[l]
 
@@ -110,6 +112,10 @@ class LoadFile(object):
     def __init__(self):
         """Initializer for LoadFile class."""
 
+        self.ents_list = None
+        self.ents_label_dict = None
+        """list, save name entities of spacy nlp"""
+
         self.input_file = None
         """Path to the input file."""
 
@@ -132,7 +138,7 @@ class LoadFile(object):
         """Root path of the models."""
 
         self._df_counts = os.path.join(self._models, "df-semeval2010.tsv.gz")
-        """Path to the document frequency counts provided in pke."""
+        """Path to the document frequency counts provided in sgz_pke."""
 
         self.stoplist = None
         """List of stopwords."""
@@ -166,14 +172,16 @@ class LoadFile(object):
                 input = f.read()
             parser = RawTextReader(language=language)
             doc = parser.read(text=input, path=path, **kwargs)
+            self.ents_list,self.ents_label_dict = parser.get_name_entities()# called after parser.read()
         elif isinstance(input, str):
             parser = RawTextReader(language=language)
             doc = parser.read(text=input, **kwargs)
+            self.ents_list,self.ents_label_dict = parser.get_name_entities()# called after parser.read()
         else:
             logging.error('Cannot process input. It is neither a file path '
                           'or a string: {}'.format(type(input)))
             return
-
+        
         # set the input file
         self.input_file = doc.input_file
 
@@ -222,7 +230,8 @@ class LoadFile(object):
                 self.sentences[i].words[j] = escaped_punctuation.get(l_word,
                                                                      word)
 
-    def is_redundant(self, candidate, prev, minimum_length=1):
+    def is_redundant(self, candidate, candidate_surface_form, prev, prev_surface_forms,
+                    minimum_length=1):
         """Test if one candidate is redundant with respect to a list of already
         selected candidates. A candidate is considered redundant if it is
         included in another candidate that is ranked higher in the list.
@@ -234,7 +243,6 @@ class LoadFile(object):
             minimum_length (int): minimum length (in words) of the candidate
                 to be considered, defaults to 1.
         """
-
         # get the tokenized lexical form from the candidate
         candidate = self.candidates[candidate].lexical_form
 
@@ -244,6 +252,17 @@ class LoadFile(object):
 
         # get the tokenized lexical forms from the selected candidates
         prev = [self.candidates[u].lexical_form for u in prev]
+        
+        #print(prev,'<-->',candidate)
+        #check surface form of selected candidates
+        candidate_surface_form_words = candidate_surface_form.split()
+        for w in prev_surface_forms:
+            #if candidate_surface_form in w:
+            w_words = w.split()
+            if any(candidate_surface_form_words==w_words[i:i+len(candidate_surface_form_words)]
+                    for i in range(len(w_words))):
+                #print('              ',candidate_surface_form,'--candidate redundant-->',w)
+                return True
 
         # loop through the already selected candidates
         for prev_candidate in prev:
@@ -252,7 +271,9 @@ class LoadFile(object):
                     return True
         return False
 
-    def get_n_best(self, n=10, redundancy_removal=False, stemming=False):
+    def get_n_best(self, n=10, redundancy_removal=False, stemming=False,
+                surface_form_lowercase=True,
+                del_ne_labels=sgzconstant.DEL_NE_LABELS):
         """Returns the n-best candidates given the weights.
 
         Args:
@@ -263,40 +284,117 @@ class LoadFile(object):
                 (lowercased, first occurring form of candidate), default to
                 False.
         """
-
         # sort candidates by descending weight
         best = sorted(self.weights, key=self.weights.get, reverse=True)
+        best_surface_forms = []
+        best_pos_dict = {}
+        for candidate in best:
+            r_count = Counter([' '.join(w) for w in self.candidates[candidate].surface_forms])
+            #candidate_surface_form = r_count.most_common()[0][0]
+            best_surface_forms.append(r_count.most_common()[0][0])#candidate_surface_form)
+            r_count = Counter([' '.join(w) for w in self.candidates[candidate].pos_patterns])
+            best_pos_dict[candidate] = r_count.most_common()[0][0]
+        #print(best_surface_forms) 
+        #print(best_pos)
+        #print()
+        
+        #remove unwanted name entity labels
+        if del_ne_labels:
+            ne_best = []
+            ne_best_surface_forms = []
+            for idx,candidate in enumerate(best):
+                #'first'-'ORDINAL'  'three','thousands'-'CARDINAL'
+                #self.ents_list,self.ents_label_dict
+                if best_surface_forms[idx] in self.ents_label_dict:
+                    nelabel = self.ents_label_dict[best_surface_forms[idx]]
+                    if nelabel in del_ne_labels:# == 'ORDINAL' or nelabel == 'CARDINAL':
+                        #print('        --del-->',best_surface_forms[idx],nelabel)
+                        continue
+                # add the candidate otherwise
+                ne_best.append(candidate)
+                #get the words from the most occurring surface form
+                ne_best_surface_forms.append(best_surface_forms[idx])
+
+            best = ne_best
+            best_surface_forms = ne_best_surface_forms
 
         # remove redundant candidates
         if redundancy_removal:
-
             # initialize a new container for non redundant candidates
             non_redundant_best = []
-
+            non_redundant_best_surface_forms = []
             # loop through the best candidates
-            for candidate in best:
-
+            for idx,candidate in enumerate(best):
+                """
+                #'first'-'ORDINAL'  'three','thousands'-'CARDINAL'
+                #self.ents_list,self.ents_label_dict
+                if best_surface_forms[idx] in self.ents_label_dict:
+                    nelabel = self.ents_label_dict[best_surface_forms[idx]]
+                    if nelabel == 'ORDINAL' or nelabel == 'CARDINAL':
+                        print('        ',best_surface_forms[idx],nelabel)
+                        continue
+                """
                 # test wether candidate is redundant
-                if self.is_redundant(candidate, non_redundant_best):
+                if self.is_redundant(candidate,best_surface_forms[idx],
+                                    non_redundant_best,non_redundant_best_surface_forms):
                     continue
-
+                # Waters <--Replace-- Maxine Waters: (name entity)
+                # time series <-- time series data
+                replaced = False
+                for ii,w in enumerate(non_redundant_best_surface_forms):
+                    bsf = best_surface_forms[idx]
+                    bsfl = bsf.split()
+                    wl = w.split()
+                    #if any(wl==bsfl[j:j+len(wl)] for j in range(len(bsfl))) and bsf in self.ents_list:
+                    #if (bsf in self.ents_list and any(wl==bsfl[j:j+len(wl)] for j in range(len(bsfl)))) or \
+                    #    (bsf not in self.ents_list and any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl)))):
+                    if any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl))):
+                        #print('        ',w,'--in-->',best_surface_forms[idx])
+                        non_redundant_best[ii] = candidate
+                        non_redundant_best_surface_forms[ii] = best_surface_forms[idx]
+                        replaced = True
+                if replaced:
+                    #查重
+                    temp = []
+                    for nrb in non_redundant_best:
+                        if nrb not in temp:
+                            temp.append(nrb)
+                    non_redundant_best = temp 
+                    temp = []
+                    for nrbs in non_redundant_best_surface_forms:
+                        if nrbs not in temp:
+                            temp.append(nrbs)
+                    non_redundant_best_surface_forms = temp 
+                    continue
                 # add the candidate otherwise
                 non_redundant_best.append(candidate)
-
+                #get the words from the most occurring surface form
+                non_redundant_best_surface_forms.append(best_surface_forms[idx])
                 # break computation if the n-best are found
                 if len(non_redundant_best) >= n:
                     break
-
             # copy non redundant candidates in best container
             best = non_redundant_best
+            best_surface_forms = non_redundant_best_surface_forms
 
         # get the list of best candidates as (lexical form, weight) tuples
         n_best = [(u, self.weights[u]) for u in best[:min(n, len(best))]]
 
         # replace with surface forms if no stemming
         if not stemming:
+            """原有代码,用的surface_forms[]第1个-->改为most frequent
             n_best = [(' '.join(self.candidates[u].surface_forms[0]).lower(),
                        self.weights[u]) for u in best[:min(n, len(best))]]
+            """
+            # only lower case
+            #n_best = [(best_surface_forms[i].lower() if lowercase else best_surface_forms[i],
+            #           self.weights[best[i]]) for i in range(min(n, len(best)))]
+            n_best = [(best_surface_forms[i] if not surface_form_lowercase and 
+                        (best_surface_forms[i] in self.ents_list or 
+                        any(ent in best_surface_forms[i] for ent in self.ents_list) or 
+                        'PROPN' in best_pos_dict[best[i]]) 
+                        else best_surface_forms[i].lower(),
+                       self.weights[best[i]]) for i in range(min(n, len(best)))]
 
         # return the list of best candidates
         return n_best
@@ -371,7 +469,6 @@ class LoadFile(object):
             key (func) : function that given a sentence return an iterable
             valid_values (set): the set of valid values, defaults to None.
         """
-
         # loop through the sentences
         for i, sentence in enumerate(self.sentences):
 
@@ -386,13 +483,37 @@ class LoadFile(object):
 
                 # add candidate offset in sequence and continue if not last word
                 if value in valid_values:
+                    """原有代码 会将name entity与其他可能单词连成一个candidate
                     seq.append(j)
                     if j < (sentence.length - 1):
-                        continue
-
+                        continue                    
+                    """
+                    seq.append(j)
+                    #check if including name entity --> try to remove ne from candidate
+                    token_text = sentence.words[j]
+                    if token_text in self.ents_list:# this token is name entity
+                        pass
+                    elif j < (sentence.length - 1):# not name entity, and not the last token
+                        if not (sentence.words[j+1] in self.ents_list):# next token not name entity
+                            continue
+                    #"""
                 # add sequence as candidate if non empty
                 if seq:
-
+                    #print(sentence.words[seq[0]:seq[-1] + 1])                    
+                    """
+                    tempwords = [w for ww in sentence.words[seq[0]:seq[-1] + 1] for w in ww.split()]
+                    #index_word2token = 
+                    tempindex = []
+                    if len(tempwords)>1:
+                        print(sentence.words[seq[0]:seq[-1] + 1])
+                        print(tempwords)
+                        for ent in self.ents_list:
+                            ent_words = ent.split()
+                            for i in range(len(tempwords)):
+                                if tempwords[i:i+len(ent_words)]==ent_words:
+                                    print(i,',',ent_words)
+                    """
+                    #print('------->',sentence.words[seq[0]:seq[-1] + 1])
                     # add the ngram to the candidate container
                     self.add_candidate(words=sentence.words[seq[0]:seq[-1] + 1],
                                        stems=sentence.stems[seq[0]:seq[-1] + 1],
@@ -402,6 +523,9 @@ class LoadFile(object):
 
                 # flush sequence container
                 seq = []
+            
+        #print(list(self.candidates))
+        #exit()
 
     def grammar_selection(self, grammar=None):
         """Select candidates using nltk RegexpParser with a grammar defining
@@ -463,18 +587,23 @@ class LoadFile(object):
             valid_punctuation_marks (str): punctuation marks that are valid
                     for a candidate, defaults to '-'.
         """
+        #for name entity token with spaces, such as 'boris johnson'
+        word = word.replace(' ', '')
+
         for punct in valid_punctuation_marks.split():
             word = word.replace(punct, '')
         return word.isalnum()
 
     def candidate_filtering(self,
                             stoplist=None,
-                            minimum_length=3,
-                            minimum_word_size=2,
-                            valid_punctuation_marks='-',
-                            maximum_word_number=5,
+                            minimum_length=sgzconstant.MINIMUM_CHAR_LENGTH,#3,
+                            minimum_word_size=sgzconstant.MINIMUM_WORD_CHAR_LENGTH,#2,
+                            valid_punctuation_marks=sgzconstant.VALID_PUNCTUATION_MARKS,#以空格作为间隔
+                            maximum_word_number=sgzconstant.MAXIMUM_WORD_NUMBER,#5,
                             only_alphanum=True,
-                            pos_blacklist=None):
+                            pos_blacklist=None,
+                            discard_stoplist=True,
+                            ):
         """Filter the candidates containing strings from the stoplist. Only
         keep the candidates containing alpha-numeric characters (if the
         non_latin_filter is set to True) and those length exceeds a given
@@ -510,34 +639,57 @@ class LoadFile(object):
 
             # get the words from the first occurring surface form
             words = [u.lower() for u in v.surface_forms[0]]
+            newwords = [word for token in words for word in token.split()] #lower case
+            
+            """
+            print('-------------------')
+            print(k,words,newwords,v.pos_patterns[0])
+            
+            print(v.lexical_form,len(v.lexical_form),
+                sum([len(token.split()) for token in v.lexical_form]),'words个数 <=',maximum_word_number)            
+            print(words,len(''.join(newwords)),'所有character个数 >=',minimum_length)
+            print(min([len(u) for u in newwords]),'单个word的最小character数 >=',minimum_word_size)
+            """
+            # discard if single word and ADJ (get POS from the first occurring)
+            if len(v.pos_patterns[0])==1 and v.pos_patterns[0][0]=='ADJ':
+                #print('       ADJ:',words)
+                del self.candidates[k]
 
             # discard if words are in the stoplist
-            if set(words).intersection(stoplist):
-                del self.candidates[k]
+            #if set(words).intersection(stoplist):
+            elif discard_stoplist and set(newwords).intersection(stoplist):
+                #print(v.lexical_form,words,newwords)
+                if not any(newwords==ent.lower().split() for ent in self.ents_list): #check if this is NOT a name entity
+                    #print('   *** Not a name entity !!! Deleting ***')
+                    del self.candidates[k]
 
             # discard if tags are in the pos_blacklist
             elif set(v.pos_patterns[0]).intersection(pos_blacklist):
                 del self.candidates[k]
 
             # discard if containing tokens composed of only punctuation
-            elif any([set(u).issubset(set(punctuation)) for u in words]):
+            #elif any([set(u).issubset(set(punctuation)) for u in words]):
+            elif any([set(u).issubset(set(punctuation)) for u in newwords]):
                 del self.candidates[k]
 
             # discard candidates composed of 1-2 characters
-            elif len(''.join(words)) < minimum_length:
+            #elif len(''.join(words)) < minimum_length:
+            elif len(''.join(newwords)) < minimum_length:
                 del self.candidates[k]
 
             # discard candidates containing small words (1-character)
-            elif min([len(u) for u in words]) < minimum_word_size:
+            #elif min([len(u) for u in words]) < minimum_word_size:
+            elif min([len(u) for u in newwords]) < minimum_word_size:
                 del self.candidates[k]
 
             # discard candidates composed of more than 5 words
-            elif len(v.lexical_form) > maximum_word_number:
+            #elif len(v.lexical_form) > maximum_word_number:
+            elif sum([len(token.split()) for token in v.lexical_form]) > maximum_word_number:
                 del self.candidates[k]
 
             # discard if not containing only alpha-numeric characters
             if only_alphanum and k in self.candidates:
                 if not all([self._is_alphanum(w, valid_punctuation_marks)
-                            for w in words]):
+                            for w in newwords]):#words]):
                     del self.candidates[k]
 
