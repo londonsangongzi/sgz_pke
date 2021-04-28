@@ -14,10 +14,14 @@ class Sentence(object):
         self.pos = []
         """list of Part-Of-Speeches."""
 
+        self.dep = []
+
         self.stems = []
         """list of stems."""
 
-        self.length = len(words)
+        #['Boris Johson','went','to','New York']
+        #self.length = len(words)
+        self.length = len([w for word in words for w in word.split()])
         """length (number of tokens) of the sentence."""
 
         self.meta = {}
@@ -112,6 +116,8 @@ class Document(object):
 
             # add the lemmas
             s.stems = sentence['lemmas']
+
+            s.dep = sentence['dep']
 
             # add the meta-information
             for (k, infos) in sentence.items():

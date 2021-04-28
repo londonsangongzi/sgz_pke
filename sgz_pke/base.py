@@ -2,6 +2,20 @@
 
 """Base classes for the sgz_pke module."""
 
+""" fix: 修改length(影响shift/offsets),gap计算-->避免build_topic_graph()出错
+1. self.length = len(words) ['Boris Johson','went','to','New York']  【DONE】
+load_document-->read(): "words": [token.text for token in sentence]  spacy_doc.sents
+-->from_sentences() s = Sentence(words=sentence['words'])-->self.length = len(words)
+
+2. longest_sequence_selection: offset=shift+seq[0] 【DONE】
+candidate_selection-->longest_sequence_selection: shift = sum([s.length for s in self.sentences[0:i]])
+-->add_candidate: offset=shift+seq[0], self.candidates[lexical_form].offsets.append(offset)
+   
+only for MultipartiteRank TopicRank
+3. build_topic_graph: gap  【】
+candidate_weighting --> build_topic_graph: p_i in self.candidates[node_i].offsets, gap = abs(p_i - p_j)...weights.append(1.0 / gap)
+"""
+
 from collections import defaultdict
 
 from sgz_pke.data_structures import Candidate, Document
@@ -25,6 +39,7 @@ from builtins import str
 
 import sgz_modules.constant as sgzconstant
 from collections import Counter
+import re
 
 # The language management should be in `sgz_pke.utils` but it would create a circular import.
 
@@ -111,6 +126,9 @@ class LoadFile(object):
 
     def __init__(self):
         """Initializer for LoadFile class."""
+
+        #两个或以上的letter重复
+        self.repeat_letters_re = re.compile(r"^([a-zA-Z])\1{1,}$")
 
         self.ents_list = None
         self.ents_label_dict = None
@@ -273,6 +291,7 @@ class LoadFile(object):
 
     def get_n_best(self, n=10, redundancy_removal=False, stemming=False,
                 surface_form_lowercase=True,
+                del_repeat_letters=True,
                 del_ne_labels=sgzconstant.DEL_NE_LABELS):
         """Returns the n-best candidates given the weights.
 
@@ -286,6 +305,9 @@ class LoadFile(object):
         """
         # sort candidates by descending weight
         best = sorted(self.weights, key=self.weights.get, reverse=True)
+        """self.weights
+        {'inflat': 0.059646288645499375, 'us': 0.05018774158352419, 'equiti': 0.025886558913396324, 'good year': 0.02910111112823012}
+        """
         best_surface_forms = []
         best_pos_dict = {}
         for candidate in best:
@@ -297,6 +319,21 @@ class LoadFile(object):
         #print(best_surface_forms) 
         #print(best_pos)
         #print()
+
+        #去掉单个字符的重复单词，如 xxxx, yyy, aa, bbbbb ^([a-zA-Z])\1{1,}$
+        if del_repeat_letters:
+            repeat_best = []
+            repeat_best_surface_forms = []
+            for idx,candidate in enumerate(best):
+                if self.repeat_letters_re.match(best_surface_forms[idx]):
+                    #print('         ----->',best_surface_forms[idx])
+                    continue
+                # add the candidate otherwise
+                repeat_best.append(candidate)
+                #get the words from the most occurring surface form
+                repeat_best_surface_forms.append(best_surface_forms[idx])
+            best = repeat_best
+            best_surface_forms = repeat_best_surface_forms            
         
         #remove unwanted name entity labels
         if del_ne_labels:
@@ -314,7 +351,6 @@ class LoadFile(object):
                 ne_best.append(candidate)
                 #get the words from the most occurring surface form
                 ne_best_surface_forms.append(best_surface_forms[idx])
-
             best = ne_best
             best_surface_forms = ne_best_surface_forms
 
@@ -464,7 +500,6 @@ class LoadFile(object):
 
     def longest_sequence_selection(self, key, valid_values):
         """Select the longest sequences of given POS tags as candidates.
-
         Args:
             key (func) : function that given a sentence return an iterable
             valid_values (set): the set of valid values, defaults to None.
@@ -474,13 +509,24 @@ class LoadFile(object):
 
             # compute the offset shift for the sentence
             shift = sum([s.length for s in self.sentences[0:i]])
+            """shift: 该句前面所有句子的token长度（注：非word长度），但原代码是word list ['Northern','Ireland']
+                若为['Northern Ireland']-->会导致计算出错！build_topic_graph() weights.append(1.0 / gap)-->fix
+             "words": [token.text for token in sentence]  spacy_doc.sents
+            self.length = len(words)
+            """
+            #print()
+            #print('   --shift-->',i,shift,sentence.words)
 
             # container for the sequence (defined as list of offsets)
             seq = []
-
-            # loop through the tokens
-            for j, value in enumerate(key(self.sentences[i])):
-
+            seq_offset = [] # for ['Northern Ireland'], 原版本['Northern','Ireland']
+            words_num = 0
+            # loop through the tokens, key=lambda s: s.pos-->key(self.sentences[i])-->pos[]
+            for j, value in enumerate(key(self.sentences[i])):#['Boris Johson','went','to','New York']
+                token_text = sentence.words[j]#['Boris Johson','went','to','New York']
+                words_num0 = words_num
+                words_num += len(token_text.split())
+                #print(j,token_text,words_num)                
                 # add candidate offset in sequence and continue if not last word
                 if value in valid_values:
                     """原有代码 会将name entity与其他可能单词连成一个candidate
@@ -489,13 +535,29 @@ class LoadFile(object):
                         continue                    
                     """
                     seq.append(j)
+                    seq_offset.append(words_num0)
                     #check if including name entity --> try to remove ne from candidate
-                    token_text = sentence.words[j]
+                    if j == (len(key(self.sentences[i])) - 1): # the last
+                        pass
+                    #'a major step in relaxing the public health guidelines Americans have lived with for more than a year'
+                    #                                               dobj      nsubj --> 不该成为1个keyword phrase
+                    elif sentence.dep[j]=='dobj' and (sentence.dep[j+1]=='nsubj' or sentence.dep[j+1]=='nsubjpass'):
+                        pass
+                    elif len(token_text.split())==1:# single word token不检测是不是name entity
+                        continue
+                    elif token_text in self.ents_list:# this token is name entity
+                        pass
+                    elif not (sentence.words[j+1] in self.ents_list and 
+                                len(sentence.words[j+1].split())>=2):# next token not name entity(>=2 words)
+                        continue
+                    """    
                     if token_text in self.ents_list:# this token is name entity
                         pass
-                    elif j < (sentence.length - 1):# not name entity, and not the last token
+                    #elif j < (sentence.length - 1):# not name entity, and not the last token
+                    elif j < (len(key(self.sentences[i])) - 1):
                         if not (sentence.words[j+1] in self.ents_list):# next token not name entity
                             continue
+                    """
                     #"""
                 # add sequence as candidate if non empty
                 if seq:
@@ -513,16 +575,17 @@ class LoadFile(object):
                                 if tempwords[i:i+len(ent_words)]==ent_words:
                                     print(i,',',ent_words)
                     """
-                    #print('------->',sentence.words[seq[0]:seq[-1] + 1])
                     # add the ngram to the candidate container
                     self.add_candidate(words=sentence.words[seq[0]:seq[-1] + 1],
                                        stems=sentence.stems[seq[0]:seq[-1] + 1],
                                        pos=sentence.pos[seq[0]:seq[-1] + 1],
-                                       offset=shift + seq[0],
+                                       #offset=shift + seq[0],
+                                       offset=shift + seq_offset[0],
                                        sentence_id=i)
 
                 # flush sequence container
                 seq = []
+                seq_offset = []               
             
         #print(list(self.candidates))
         #exit()

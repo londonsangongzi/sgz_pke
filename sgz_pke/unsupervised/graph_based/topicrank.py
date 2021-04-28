@@ -185,9 +185,13 @@ class TopicRank(LoadFile):
                         for p_j in self.candidates[c_j].offsets:
                             gap = abs(p_i - p_j)
                             if p_i < p_j:
-                                gap -= len(self.candidates[c_i].lexical_form) - 1
+                                #gap -= len(self.candidates[c_i].lexical_form) - 1
+                                lf = self.candidates[c_i].lexical_form #['New York','city']
+                                gap -= len([w for word in lf for w in word.split()]) - 1                                
                             if p_j < p_i:
-                                gap -= len(self.candidates[c_j].lexical_form) - 1
+                                #gap -= len(self.candidates[c_j].lexical_form) - 1
+                                lf = self.candidates[c_j].lexical_form
+                                gap -= len([w for word in lf for w in word.split()]) - 1                                
                             self.graph[i][j]['weight'] += 1.0 / gap
 
     def candidate_weighting(self,

@@ -110,7 +110,7 @@ class MultipartiteRank(TopicRank):
         for cluster_id in range(1, max(clusters) + 1):
             self.topics.append([candidates[j] for j in range(len(clusters))
                                 if clusters[j] == cluster_id])
-
+        
         # assign cluster identifiers to candidates
         for i, cluster_id in enumerate(clusters):
             self.topic_identifiers[candidates[i]] = cluster_id - 1
@@ -131,16 +131,23 @@ class MultipartiteRank(TopicRank):
             weights = []
             for p_i in self.candidates[node_i].offsets:
                 for p_j in self.candidates[node_j].offsets:
-
                     # compute gap
                     gap = abs(p_i - p_j)
-
                     # alter gap according to candidate length
                     if p_i < p_j:
-                        gap -= len(self.candidates[node_i].lexical_form) - 1
+                        #gap -= len(self.candidates[node_i].lexical_form) - 1
+                        lf = self.candidates[node_i].lexical_form #['New York','city']
+                        gap -= len([w for word in lf for w in word.split()]) - 1
                     if p_j < p_i:
-                        gap -= len(self.candidates[node_j].lexical_form) - 1
-
+                        #gap -= len(self.candidates[node_j].lexical_form) - 1
+                        lf = self.candidates[node_j].lexical_form
+                        gap -= len([w for word in lf for w in word.split()]) - 1
+                    """
+                    if gap==0.0:
+                        print()
+                        print('    --node_i-->',p_i,node_i,self.candidates[node_i].lexical_form)
+                        print('    --node_j-->',p_j,node_j,self.candidates[node_j].lexical_form)
+                    """
                     weights.append(1.0 / gap)
 
             # add weighted edges 

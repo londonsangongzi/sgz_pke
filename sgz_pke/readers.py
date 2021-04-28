@@ -207,6 +207,7 @@ class RawTextReader(Reader):
             sentences.append({
                 "words": [token.text for token in sentence],
                 "lemmas": [token.lemma_ for token in sentence],
+                "dep": [token.dep_ for token in sentence],
                 # FIX : This is a fallback if `fix_spacy_for_french` does not work
                 "POS": [token.pos_ or token.tag_ for token in sentence],
                 "char_offsets": [(token.idx, token.idx + len(token.text))
