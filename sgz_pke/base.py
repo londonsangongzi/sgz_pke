@@ -541,7 +541,18 @@ class LoadFile(object):
                         pass
                     #'a major step in relaxing the public health guidelines Americans have lived with for more than a year'
                     #                                               dobj      nsubj --> 不该成为1个keyword phrase
-                    elif sentence.dep[j]=='dobj' and (sentence.dep[j+1]=='nsubj' or sentence.dep[j+1]=='nsubjpass'):
+                    #I see all the   time       people saying
+                    #               npadvmod    nsubj --> 不该成为1个keyword phrase
+                    elif (sentence.dep[j]=='dobj' or sentence.dep[j]=='npadvmod') and \
+                        (sentence.dep[j+1]=='nsubj' or sentence.dep[j+1]=='nsubjpass'):
+                        pass
+                    #Please join MIT SMR authors Bart de Langhe and Stefano Puntoni.
+                    #                     dobj    appos --> 不跟前面的word组成keyword phrase
+                    # appositional modifier,同位词 
+                    elif sentence.dep[j]=='dobj' and sentence.dep[j+1]=='appos':
+                        #print('- - - dobj + appos - - -')
+                        #print(token_text,'|',sentence.words[j+1])
+                        #print(sentence.words)                        
                         pass
                     elif len(token_text.split())==1:# single word token不检测是不是name entity
                         continue
