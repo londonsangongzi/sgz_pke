@@ -121,41 +121,48 @@ class MultipartiteRank(TopicRank):
         # adding the nodes to the graph
         self.graph.add_nodes_from(self.candidates.keys())
 
-        # pre-compute edge weights
-        for node_i, node_j in combinations(self.candidates.keys(), 2):
+        try:
+            # pre-compute edge weights
+            for node_i, node_j in combinations(self.candidates.keys(), 2):
 
-            # discard intra-topic edges
-            if self.topic_identifiers[node_i] == self.topic_identifiers[node_j]:
-                continue
+                # discard intra-topic edges
+                if self.topic_identifiers[node_i] == self.topic_identifiers[node_j]:
+                    continue
 
-            weights = []
-            for p_i in self.candidates[node_i].offsets:
-                for p_j in self.candidates[node_j].offsets:
-                    # compute gap
-                    gap = abs(p_i - p_j)
-                    # alter gap according to candidate length
-                    if p_i < p_j:
-                        #gap -= len(self.candidates[node_i].lexical_form) - 1
-                        lf = self.candidates[node_i].lexical_form #['New York','city']
-                        gap -= len([w for word in lf for w in word.split()]) - 1
-                    if p_j < p_i:
-                        #gap -= len(self.candidates[node_j].lexical_form) - 1
-                        lf = self.candidates[node_j].lexical_form
-                        gap -= len([w for word in lf for w in word.split()]) - 1
-                    """
-                    if gap==0.0:
-                        print()
-                        print('    --node_i-->',p_i,node_i,self.candidates[node_i].lexical_form)
-                        print('    --node_j-->',p_j,node_j,self.candidates[node_j].lexical_form)
-                    """
-                    weights.append(1.0 / gap)
+                weights = []
+                for p_i in self.candidates[node_i].offsets:
+                    for p_j in self.candidates[node_j].offsets:
+                        # compute gap
+                        gap = abs(p_i - p_j)
+                        # alter gap according to candidate length
+                        if p_i < p_j:
+                            #gap -= len(self.candidates[node_i].lexical_form) - 1
+                            lf = self.candidates[node_i].lexical_form #['New York','city']
+                            gap -= len([w for word in lf for w in word.split()]) - 1
+                        if p_j < p_i:
+                            #gap -= len(self.candidates[node_j].lexical_form) - 1
+                            lf = self.candidates[node_j].lexical_form
+                            gap -= len([w for word in lf for w in word.split()]) - 1
+                        """
+                        if gap==0.0:
+                            print()
+                            print('    --node_i-->',p_i,node_i,self.candidates[node_i].lexical_form)
+                            print('    --node_j-->',p_j,node_j,self.candidates[node_j].lexical_form)
+                        """
+                        weights.append(1.0 / gap)
 
-            # add weighted edges 
-            if weights:
-                # node_i -> node_j
-                self.graph.add_edge(node_i, node_j, weight=sum(weights))
-                # node_j -> node_i
-                self.graph.add_edge(node_j, node_i, weight=sum(weights))
+                # add weighted edges 
+                if weights:
+                    # node_i -> node_j
+                    self.graph.add_edge(node_i, node_j, weight=sum(weights))
+                    # node_j -> node_i
+                    self.graph.add_edge(node_j, node_i, weight=sum(weights))
+        except MemoryError:
+            import gc
+            del self.graph
+            gc.collect()
+            self.graph = nx.DiGraph()
+            raise MemoryError('MultipartiteRank.build_topic_graph() MemoryError!')
 
     def weight_adjustment(self, alpha=1.1):
         """ Adjust edge weights for boosting some candidates.
