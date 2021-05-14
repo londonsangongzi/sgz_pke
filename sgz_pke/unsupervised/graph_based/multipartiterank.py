@@ -163,7 +163,10 @@ class MultipartiteRank(TopicRank):
             #gc.collect()
             #self.graph = nx.DiGraph()
             self.graph.clear()
-            raise MemoryError('MultipartiteRank.build_topic_graph() MemoryError!')
+            self.graph = nx.DiGraph()
+            import gc
+            gc.collect()
+            raise MemoryError('--  MultipartiteRank.build_topic_graph() MemoryError!')
         """
         import sys
         mem = sys.getsizeof(self.graph.edges) + sys.getsizeof(self.graph.nodes)
