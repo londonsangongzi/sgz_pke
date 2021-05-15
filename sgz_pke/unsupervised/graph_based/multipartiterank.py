@@ -158,15 +158,8 @@ class MultipartiteRank(TopicRank):
                     # node_j -> node_i
                     self.graph.add_edge(node_j, node_i, weight=sum(weights))
         except MemoryError:
-            #import gc
-            #del self.graph
-            #gc.collect()
-            #self.graph = nx.DiGraph()
-            self.graph.clear()
-            self.graph = None
-            #self.graph = nx.DiGraph()
-            #import gc
-            #gc.collect()
+            #self.graph.clear()
+            #self.graph = None
             raise MemoryError('MemoryError: MultipartiteRank.build_topic_graph()')
         """
         import sys
@@ -223,8 +216,8 @@ class MultipartiteRank(TopicRank):
                 position_i = math.exp(position_i)
                 self.graph[node_j][node_i]['weight'] += (boosters * alpha * position_i)
         except MemoryError:
-            self.graph.clear()
-            self.graph = None
+            #self.graph.clear()
+            #self.graph = None
             raise MemoryError('MemoryError: MultipartiteRank.weight_adjustment()')
 
 
