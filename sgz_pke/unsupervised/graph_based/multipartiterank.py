@@ -189,38 +189,44 @@ class MultipartiteRank(TopicRank):
         # find the sum of all first positions
         norm = sum([s.length for s in self.sentences])
 
-        # Topical boosting
-        for variants in self.topics:
+        try:
+            # Topical boosting
+            for variants in self.topics:
 
-            # skip one candidate topics
-            if len(variants) == 1:
-                continue
+                # skip one candidate topics
+                if len(variants) == 1:
+                    continue
 
-            # get the offsets
-            offsets = [self.candidates[v].offsets[0] for v in variants]
+                # get the offsets
+                offsets = [self.candidates[v].offsets[0] for v in variants]
 
-            # get the first occurring variant
-            first = variants[offsets.index(min(offsets))]
+                # get the first occurring variant
+                first = variants[offsets.index(min(offsets))]
 
-            # find the nodes to which it connects -- Python 2/3 compatible
-            # for start, end in self.graph.edges_iter(first):
-            for start, end in self.graph.edges(first):
+                # find the nodes to which it connects -- Python 2/3 compatible
+                # for start, end in self.graph.edges_iter(first):
+                for start, end in self.graph.edges(first):
 
-                boosters = []
-                for v in variants:
-                    if v != first and self.graph.has_edge(v, end):
-                        boosters.append(self.graph[v][end]['weight'])
+                    boosters = []
+                    for v in variants:
+                        if v != first and self.graph.has_edge(v, end):
+                            boosters.append(self.graph[v][end]['weight'])
 
-                if boosters:
-                    weighted_edges[(start, end)] = np.sum(boosters)
+                    if boosters:
+                        weighted_edges[(start, end)] = np.sum(boosters)
 
-        # update edge weights -- Python 2/3 compatible
-        # for nodes, boosters in weighted_edges.iteritems():
-        for nodes, boosters in weighted_edges.items():
-            node_i, node_j = nodes
-            position_i = 1.0 / (1 + self.candidates[node_i].offsets[0])
-            position_i = math.exp(position_i)
-            self.graph[node_j][node_i]['weight'] += (boosters * alpha * position_i)
+            # update edge weights -- Python 2/3 compatible
+            # for nodes, boosters in weighted_edges.iteritems():
+            for nodes, boosters in weighted_edges.items():
+                node_i, node_j = nodes
+                position_i = 1.0 / (1 + self.candidates[node_i].offsets[0])
+                position_i = math.exp(position_i)
+                self.graph[node_j][node_i]['weight'] += (boosters * alpha * position_i)
+        except MemoryError:
+            self.graph.clear()
+            self.graph = None
+            raise MemoryError('MemoryError: MultipartiteRank.weight_adjustment()')
+
 
     def candidate_weighting(self,
                             threshold=0.74,
