@@ -191,10 +191,12 @@ class LoadFile(object):
             parser = RawTextReader(language=language)
             doc = parser.read(text=input, path=path, **kwargs)
             self.ents_list,self.ents_label_dict = parser.get_name_entities()# called after parser.read()
+            parser.spacy_doc = None #手动清除
         elif isinstance(input, str):
             parser = RawTextReader(language=language)
             doc = parser.read(text=input, **kwargs)
             self.ents_list,self.ents_label_dict = parser.get_name_entities()# called after parser.read()
+            parser.spacy_doc = None #手动清除
         else:
             logging.error('Cannot process input. It is neither a file path '
                           'or a string: {}'.format(type(input)))
