@@ -142,20 +142,24 @@ class RawTextReader(Reader):
         if language is None:
             self.language = 'en'
 
-        self.spacy_doc = None
+        #self.spacy_doc = None
+        self.ents_list = []
+        self.ents_label_dict = {}
     
-    def get_name_entities(self):
-        if self.spacy_doc:
-            ne = list(set([X.text for X in self.spacy_doc.ents]))
-            #sort by num of words --> longest_sequence_selection() 处理时先考虑字数多的name entity
-            ne.sort(key=lambda x: len(x.split()), reverse=True)
-            ne_label_dict = {}
-            for w in ne:
-                r_count = Counter([X.label_ for X in self.spacy_doc.ents if X.text==w])
-                ne_label_dict[w] = r_count.most_common()[0][0]
-            return ne,ne_label_dict
-        else:
-            return []
+    def _get_name_entities(self,ents_full_list):
+        self.ents_list.clear()
+        self.ents_list = []
+        self.ents_label_dict.clear()
+        self.ents_label_dict = {}
+
+        self.ents_list = list(set([X['text'] for X in ents_full_list]))
+        #sort by num of words --> longest_sequence_selection() 处理时先考虑字数多的name entity
+        self.ents_list.sort(key=lambda x: len(x.split()), reverse=True)
+        #self.ents_label_dict = {}
+        for w in self.ents_list:
+            r_count = Counter([X['label_'] for X in ents_full_list if X['text']==w])
+            self.ents_label_dict[w] = r_count.most_common()[0][0]
+        #return ne,ne_label_dict
 
     def read(self, text, **kwargs):
         """Read the input file and use spacy to pre-process.
@@ -178,6 +182,7 @@ class RawTextReader(Reader):
         """
 
         spacy_model = kwargs.get('spacy_model', None)
+        batch_size = kwargs.get('batch_size', 500)
 
         if spacy_model is None:
             spacy_kwargs = {'disable': ['ner', 'textcat', 'parser']}
@@ -200,10 +205,14 @@ class RawTextReader(Reader):
             spacy_model.add_pipe(sentencizer)
 
         spacy_model = fix_spacy_for_french(spacy_model)
-        self.spacy_doc = spacy_model(text)
 
         sentences = []
-        for sentence_id, sentence in enumerate(self.spacy_doc.sents):
+        ents_full_list = []
+
+        """原版本
+        spacy_doc = spacy_model(text)
+        ents_full_list = [{'text':X.text,'label_':X.label_} for X in spacy_doc.ents]
+        for sentence_id, sentence in enumerate(spacy_doc.sents):
             sentences.append({
                 "words": [token.text for token in sentence],
                 "lemmas": [token.lemma_ for token in sentence],
@@ -211,9 +220,69 @@ class RawTextReader(Reader):
                 # FIX : This is a fallback if `fix_spacy_for_french` does not work
                 "POS": [token.pos_ or token.tag_ for token in sentence],
                 "char_offsets": [(token.idx, token.idx + len(token.text))
-                                     for token in sentence]
-            })
+                                    for token in sentence]
+            })        
+        """
+        
+        """
+        采用nlp.pipe()提升效率，降低内存 
+        https://spacy.io/usage/processing-pipelines#processing
+        
+        for doc in nlp.pipe(texts, batch_size=10000, n_threads=3):
+        
+        i int The index of the token within the parent document.        
+        idx int The character offset of the token within the parent document.
 
+        parsed_sentence = nlp(u'This is my sentence')
+        [(token.text,token.i) for token in parsed_sentence]
+            [(u'This', 0), (u'is', 1), (u'my', 2), (u'sentence', 3)]
+        [(token.text,token.idx) for token in parsed_sentence]
+            [(u'This', 0), (u'is', 5), (u'my', 8), (u'sentence', 11)]
+        """
+
+        #"""
+        #第一步：分句
+        other_pipes = [pipe for pipe in spacy_model.pipe_names if pipe not in \
+            ['PySBDFactory','nltk_sentencizer','sentencizer']]
+        disabled  = spacy_model.disable_pipes(*other_pipes)#只保留分句子pipeline
+        #print(spacy_model.pipe_names)
+        onlysent_doc = spacy_model(text)
+        #print([sen.string for sen in onlysent_doc.sents])
+        #print([token.is_sent_start for token in onlysent_doc])
+        disabled.restore()
+        #第二步：按句子doc化
+        #other_pipes = [pipe for pipe in spacy_model.pipe_names if pipe in \
+        #    ['PySBDFactory','nltk_sentencizer','sentencizer']]
+        #disabled  = spacy_model.disable_pipes(*other_pipes)#去掉分句子pipeline
+        #print(spacy_model.pipe_names)
+        sen_char_offsets = 0
+        
+        for sen_doc in spacy_model.pipe([sen.string for sen in onlysent_doc.sents],\
+                                        batch_size=batch_size):
+            #print([sen.string for sen in sen_doc.sents])
+            ents_full_list += [{'text':X.text,'label_':X.label_} for X in sen_doc.ents]
+            for sentence_id, sentence in enumerate(sen_doc.sents):
+                char_offsets = \
+                    [(token.idx+sen_char_offsets, token.idx+len(token.text)+sen_char_offsets) \
+                        for token in sentence]
+                sentences.append({
+                    "words": [token.text for token in sentence],
+                    "lemmas": [token.lemma_ for token in sentence],
+                    "dep": [token.dep_ for token in sentence],
+                    # FIX : This is a fallback if `fix_spacy_for_french` does not work
+                    "POS": [token.pos_ or token.tag_ for token in sentence],
+                    "char_offsets": char_offsets
+                })
+            sen_char_offsets = char_offsets[-1][1] + 1 #偏移按doc来计
+        #"""
+        self._get_name_entities(ents_full_list)
+        """
+        print()
+        for s in sentences:
+            print(s['words'],s['char_offsets'][0][0],s['char_offsets'][-1][1])
+        print(len(sentences))
+        exit()
+        """
         doc = Document.from_sentences(sentences,
                                       input_file=kwargs.get('input_file', None),
                                       **kwargs)

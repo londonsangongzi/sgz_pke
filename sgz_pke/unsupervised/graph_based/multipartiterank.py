@@ -85,35 +85,37 @@ class MultipartiteRank(TopicRank):
                     similarity. 
                 method (str): the linkage method, defaults to average.
         """
+        try:
+            # handle document with only one candidate
+            if len(self.candidates) == 1:
+                candidate = list(self.candidates)[0]
+                self.topics.append([candidate])
+                self.topic_identifiers[candidate] = 0
+                return
 
-        # handle document with only one candidate
-        if len(self.candidates) == 1:
-            candidate = list(self.candidates)[0]
-            self.topics.append([candidate])
-            self.topic_identifiers[candidate] = 0
-            return
+            # vectorize the candidates
+            candidates, X = self.vectorize_candidates()
 
-        # vectorize the candidates
-        candidates, X = self.vectorize_candidates()
+            # compute the distance matrix
+            Y = pdist(X, 'jaccard')
+            Y = np.nan_to_num(Y)
 
-        # compute the distance matrix
-        Y = pdist(X, 'jaccard')
-        Y = np.nan_to_num(Y)
+            # compute the clusters
+            Z = linkage(Y, method=method)
 
-        # compute the clusters
-        Z = linkage(Y, method=method)
+            # form flat clusters
+            clusters = fcluster(Z, t=threshold, criterion='distance')
 
-        # form flat clusters
-        clusters = fcluster(Z, t=threshold, criterion='distance')
-
-        # for each cluster id
-        for cluster_id in range(1, max(clusters) + 1):
-            self.topics.append([candidates[j] for j in range(len(clusters))
-                                if clusters[j] == cluster_id])
-        
-        # assign cluster identifiers to candidates
-        for i, cluster_id in enumerate(clusters):
-            self.topic_identifiers[candidates[i]] = cluster_id - 1
+            # for each cluster id
+            for cluster_id in range(1, max(clusters) + 1):
+                self.topics.append([candidates[j] for j in range(len(clusters))
+                                    if clusters[j] == cluster_id])
+            
+            # assign cluster identifiers to candidates
+            for i, cluster_id in enumerate(clusters):
+                self.topic_identifiers[candidates[i]] = cluster_id - 1
+        except MemoryError:
+            raise MemoryError('MemoryError: MultipartiteRank.topic_clustering()')
 
     def build_topic_graph(self):
         """ Build the Multipartite graph. """
