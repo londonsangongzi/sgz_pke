@@ -28,6 +28,7 @@ from nltk.stem.snowball import SnowballStemmer, PorterStemmer
 
 from .langcodes import LANGUAGE_CODE_BY_NAME
 
+import string
 from string import punctuation
 import os
 import logging
@@ -311,6 +312,10 @@ class LoadFile(object):
         """
         # sort candidates by descending weight
         best = sorted(self.weights, key=self.weights.get, reverse=True)
+        #print()
+        #print('get_n_best()---all candidates---',len(best))
+        #print(best)
+        #print(len(self.candidates.keys()))
         """self.weights
         {'inflat': 0.059646288645499375, 'us': 0.05018774158352419, 'equiti': 0.025886558913396324, 'good year': 0.02910111112823012}
         """
@@ -441,7 +446,7 @@ class LoadFile(object):
         # return the list of best candidates
         return n_best
 
-    def add_candidate(self, words, stems, pos, offset, sentence_id):
+    def add_candidate(self, words, stems, pos, offset, sentence_id,candidate_char_offset=()):
         """Add a keyphrase candidate to the candidates container.
 
         Args:
@@ -454,6 +459,10 @@ class LoadFile(object):
 
         # build the lexical (canonical) form of the candidate using stems
         lexical_form = ' '.join(stems)
+
+        #记录candidate在句子里的char offset
+        if len(candidate_char_offset)>0:
+            self.candidates[lexical_form].candidate_char_offsets.append(candidate_char_offset)
 
         # add/update the surface forms
         self.candidates[lexical_form].surface_forms.append(words)
@@ -515,10 +524,12 @@ class LoadFile(object):
 
             # compute the offset shift for the sentence
             shift = sum([s.length for s in self.sentences[0:i]])
-            """shift: 该句前面所有句子的token长度（注：非word长度），但原代码是word list ['Northern','Ireland']
-                若为['Northern Ireland']-->会导致计算出错！build_topic_graph() weights.append(1.0 / gap)-->fix
-             "words": [token.text for token in sentence]  spacy_doc.sents
-            self.length = len(words)
+            """shift：单个词的距离（注：不是token）
+                原代码是['Northern','Ireland'],若为['Northern Ireland']-->会导致计算出错！
+                build_topic_graph() weights.append(1.0 / gap)-->fix
+            words: ['Boris Johson','went','to','New York'], [token.text for token in sentence] spacy_doc.sents
+            原代码: self.length = len(words) 修改为--> 
+                    len([w for word in words for w in word.split()])
             """
             #print()
             #print('   --shift-->',i,shift,sentence.words)
@@ -593,12 +604,17 @@ class LoadFile(object):
                                     print(i,',',ent_words)
                     """
                     # add the ngram to the candidate container
+                    temp_offsets = sentence.meta['char_offsets']
+                    #t0 = temp_offsets[0][0]
+                    #temp_offsets = [(t[0]-t0,t[1]-t0) for t in temp_offsets]#按句子归一化offset
                     self.add_candidate(words=sentence.words[seq[0]:seq[-1] + 1],
                                        stems=sentence.stems[seq[0]:seq[-1] + 1],
                                        pos=sentence.pos[seq[0]:seq[-1] + 1],
                                        #offset=shift + seq[0],
                                        offset=shift + seq_offset[0],
-                                       sentence_id=i)
+                                       sentence_id=i,
+                                       candidate_char_offset=(temp_offsets[seq[0]][0],temp_offsets[seq[-1]][1])
+                                       )
 
                 # flush sequence container
                 seq = []
@@ -674,6 +690,36 @@ class LoadFile(object):
             word = word.replace(punct, '')
         return word.isalnum()
 
+    #从topicrank.py移过来
+    def candidate_selection(self, pos=None, stoplist=None):
+        """Selects longest sequences of nouns and adjectives as keyphrase
+        candidates.
+
+        Args:
+            pos (set): the set of valid POS tags, defaults to ('NOUN',
+                'PROPN', 'ADJ').
+            stoplist (list): the stoplist for filtering candidates, defaults to
+                the nltk stoplist. Words that are punctuation marks from
+                string.punctuation are not allowed.
+
+        """
+
+        # define default pos tags set
+        if pos is None:
+            pos = {'NOUN', 'PROPN', 'ADJ'}
+
+        # select sequence of adjectives and nouns
+        self.longest_pos_sequence_selection(valid_pos=pos)
+
+        # initialize stoplist list if not provided
+        if stoplist is None:
+            stoplist = self.stoplist
+
+        # filter candidates containing stopwords or punctuation marks
+        self.candidate_filtering(stoplist=list(string.punctuation) +
+                                          ['-lrb-', '-rrb-', '-lcb-', '-rcb-', '-lsb-', '-rsb-'] +
+                                          stoplist)
+
     def candidate_filtering(self,
                             stoplist=None,
                             minimum_length=sgzconstant.MINIMUM_CHAR_LENGTH,#3,
@@ -704,6 +750,10 @@ class LoadFile(object):
             pos_blacklist (list): list of unwanted Part-Of-Speeches in
                 candidates, defaults to [].
         """
+        #print('-----------------')
+        #print(len(list(self.candidates)))
+        #print(list(self.candidates))
+        #exit()
 
         if stoplist is None:
             stoplist = []

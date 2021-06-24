@@ -66,8 +66,11 @@ class Candidate(object):
         self.surface_forms = []
         """ the surface forms of the candidate. """
 
+        self.candidate_char_offsets = []
+        """ the char offsets of the candidate. 为了定位句子里的candidate"""
+
         self.offsets = []
-        """ the offsets of the surface forms. """
+        """ the (word)offsets of the surface forms. """
 
         self.sentence_ids = []
         """ the sentence id of each surface form. """

@@ -72,34 +72,7 @@ class TopicRank(LoadFile):
         self.topics = []
         """ The topic container. """
 
-    def candidate_selection(self, pos=None, stoplist=None):
-        """Selects longest sequences of nouns and adjectives as keyphrase
-        candidates.
 
-        Args:
-            pos (set): the set of valid POS tags, defaults to ('NOUN',
-                'PROPN', 'ADJ').
-            stoplist (list): the stoplist for filtering candidates, defaults to
-                the nltk stoplist. Words that are punctuation marks from
-                string.punctuation are not allowed.
-
-        """
-
-        # define default pos tags set
-        if pos is None:
-            pos = {'NOUN', 'PROPN', 'ADJ'}
-
-        # select sequence of adjectives and nouns
-        self.longest_pos_sequence_selection(valid_pos=pos)
-
-        # initialize stoplist list if not provided
-        if stoplist is None:
-            stoplist = self.stoplist
-
-        # filter candidates containing stopwords or punctuation marks
-        self.candidate_filtering(stoplist=list(string.punctuation) +
-                                          ['-lrb-', '-rrb-', '-lcb-', '-rcb-', '-lsb-', '-rsb-'] +
-                                          stoplist)
 
     def vectorize_candidates(self):
         """Vectorize the keyphrase candidates.

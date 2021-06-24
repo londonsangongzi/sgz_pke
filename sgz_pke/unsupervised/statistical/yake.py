@@ -83,7 +83,7 @@ class YAKE(LoadFile):
         self.surface_to_lexical = {}
         """ Mapping from surface form to lexical form. """
 
-    def candidate_selection(self, n=3, stoplist=None, **kwargs):
+    def candidate_selection_old(self, n=3, stoplist=None, **kwargs):
         """Select 1-3 grams as keyphrase candidates. Candidates beginning or
         ending with a stopword are filtered out. Words that do not contain
         at least one alpha-numeric character are not allowed.
@@ -118,6 +118,7 @@ class YAKE(LoadFile):
                     v.surface_forms[0][-1]) < 3:
                 del self.candidates[k]
 
+    
     def _vocabulary_building(self, use_stems=False):
         """Build the vocabulary that will be used to weight candidates. Only
         words containing at least one alpha-numeric character are kept.
@@ -133,6 +134,8 @@ class YAKE(LoadFile):
             # compute the offset shift for the sentence
             shift = sum([s.length for s in self.sentences[0:i]])
 
+            j1 = 0 #记录word shift-->替代下面j
+
             # loop through words in sentence
             for j, word in enumerate(sentence.words):
 
@@ -145,8 +148,25 @@ class YAKE(LoadFile):
                     if use_stems:
                         index = sentence.stems[j]
 
-                    # add the word occurrence
-                    self.words[index].add((shift + j, shift, i, word))
+                    # add the word occurrence 原版本
+                    #self.words[index].add((shift + j, shift, i, word))
+                    #                word offset in doc, sen's word offset,sen id 
+                    """会有错误！
+                    Donald Trump is good in New York. Will David Beckham come back?
+                    {'donald trump': {(0, 0, 0, 'Donald Trump')}, 'is': {(1, 0, 0, 'is')}, 'good': {(2, 0, 0, 'good')}, 
+                    'in': {(3, 0, 0, 'in')}, 'new york': {(4, 0, 0, 'New York')}, 'will': {(8, 8, 1, 'Will')}, 
+                    'david beckham': {(9, 8, 1, 'David Beckham')}, 'come': {(10, 8, 1, 'come')}, 
+                    'back': {(11, 8, 1, 'back')}}
+                    """
+                    self.words[index].add((shift + j1, shift, i, word))
+                    """
+                    {'donald trump': {(0, 0, 0, 'Donald Trump')}, 'is': {(2, 0, 0, 'is')}, 'good': {(3, 0, 0, 'good')}, 
+                    'in': {(4, 0, 0, 'in')}, 'new york': {(5, 0, 0, 'New York')}, 'will': {(8, 8, 1, 'Will')}, 
+                    'david beckham': {(9, 8, 1, 'David Beckham')}, 'come': {(11, 8, 1, 'come')}, 
+                    'back': {(12, 8, 1, 'back')}}
+                    """
+
+                j1 += len(word.split())
 
     def _contexts_building(self, use_stems=False, window=2):
         """Build the contexts of the words for computing the relatedness
@@ -321,7 +341,9 @@ class YAKE(LoadFile):
             E = self.features[word]['DIFFERENT']
             self.features[word]['weight'] = (D * B) / (A + (C / D) + (E / D))
 
-    def candidate_weighting(self, window=2, stoplist=None, use_stems=False):
+    def candidate_weighting(self, window=2, stoplist=None, 
+                            #use_stems=False): #old
+                            use_stems=True):
         """Candidate weight calculation as described in the YAKE paper.
 
         Args:
@@ -334,9 +356,14 @@ class YAKE(LoadFile):
         """
         if not self.candidates:
             return
-
+        
+        #print('-----------')    
+        #print(len(self.words))
         # build the vocabulary
         self._vocabulary_building(use_stems=use_stems)
+        #print(len(self.words))
+        #print(self.words)
+        #exit()
 
         # extract the contexts
         self._contexts_building(use_stems=use_stems, window=window)
@@ -398,7 +425,7 @@ class YAKE(LoadFile):
                     # self.weights[candidate] /= TF * (1 + sum(weights))
                     # self.surface_to_lexical[candidate] = k
 
-    def is_redundant(self, candidate, prev, threshold=0.8):
+    def is_redundant_old(self, candidate, prev, threshold=0.8):
         """Test if one candidate is redundant with respect to a list of already
         selected candidates. A candidate is considered redundant if its
         levenshtein distance, with another candidate that is ranked higher in
@@ -418,8 +445,8 @@ class YAKE(LoadFile):
             if (1.0 - dist) > threshold:
                 return True
         return False
-
-    def get_n_best(self,
+    
+    def get_n_best_old(self,
                    n=10,
                    redundancy_removal=True,
                    stemming=False,

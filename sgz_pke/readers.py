@@ -211,6 +211,7 @@ class RawTextReader(Reader):
 
         if batch_size<=0:
             #"""原版本
+            #'| Basic salary'-->'&#124; Basic salary'??
             spacy_doc = spacy_model(text)
             ents_full_list = [{'text':X.text,'label_':X.label_} for X in spacy_doc.ents]
             for sentence_id, sentence in enumerate(spacy_doc.sents):
@@ -226,7 +227,7 @@ class RawTextReader(Reader):
             #"""
         else:
             """
-            采用nlp.pipe()提升效率，降低内存 
+            采用nlp.pipe() 降低内存,但速度会降低
             https://spacy.io/usage/processing-pipelines#processing
             
             for doc in nlp.pipe(texts, batch_size=10000, n_threads=3):
