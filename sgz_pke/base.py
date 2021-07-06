@@ -24,7 +24,7 @@ from sgz_pke.readers import MinimalCoreNLPReader, RawTextReader
 from nltk import RegexpParser
 from nltk.corpus import stopwords
 from nltk.tag.mapping import map_tag
-from nltk.stem.snowball import SnowballStemmer, PorterStemmer
+from nltk.stem.snowball import SnowballStemmer#, PorterStemmer
 
 from .langcodes import LANGUAGE_CODE_BY_NAME
 
@@ -32,15 +32,16 @@ import string
 from string import punctuation
 import os
 import logging
-import codecs
-
-from six import string_types
+#import codecs
+#from six import string_types
 
 from builtins import str
 
 import sgz_modules.constant as sgzconstant
 from collections import Counter
 import re
+
+from fuzzywuzzy import fuzz,process
 
 # The language management should be in `sgz_pke.utils` but it would create a circular import.
 
@@ -213,6 +214,8 @@ class LoadFile(object):
         # set the language of the document
         self.language = language
 
+        self.stem_func = get_stemmer_func(self.language)
+
         # set the sentences
         self.sentences = doc.sentences
 
@@ -256,6 +259,7 @@ class LoadFile(object):
                                                                      word)
 
     def is_redundant(self, candidate, candidate_surface_form, prev, prev_surface_forms,
+                    fuzz_threshold=83, #大于该值-->重复
                     minimum_length=1):
         """Test if one candidate is redundant with respect to a list of already
         selected candidates. A candidate is considered redundant if it is
@@ -268,17 +272,19 @@ class LoadFile(object):
             minimum_length (int): minimum length (in words) of the candidate
                 to be considered, defaults to 1.
         """
+        if len(prev_surface_forms)==0:
+            return False
+
         # get the tokenized lexical form from the candidate
-        candidate = self.candidates[candidate].lexical_form
+        candidate_tokens = self.candidates[candidate].lexical_form
 
         # only consider candidate greater than one word
-        if len(candidate) < minimum_length:
+        if len(candidate_tokens) < minimum_length:
             return False
 
         # get the tokenized lexical forms from the selected candidates
-        prev = [self.candidates[u].lexical_form for u in prev]
+        prev_tokens = [self.candidates[u].lexical_form for u in prev]
         
-        #print(prev,'<-->',candidate)
         #check surface form of selected candidates
         candidate_surface_form_words = candidate_surface_form.split()
         for w in prev_surface_forms:
@@ -286,20 +292,106 @@ class LoadFile(object):
             w_words = w.split()
             if any(candidate_surface_form_words==w_words[i:i+len(candidate_surface_form_words)]
                     for i in range(len(w_words))):
-                #print('              ',candidate_surface_form,'--candidate redundant-->',w)
                 return True
 
         # loop through the already selected candidates
-        for prev_candidate in prev:
-            for i in range(len(prev_candidate) - len(candidate) + 1):
-                if candidate == prev_candidate[i:i + len(candidate)]:
+        for prev_candidate in prev_tokens:
+            for i in range(len(prev_candidate) - len(candidate_tokens) + 1):
+                if candidate_tokens == prev_candidate[i:i + len(candidate_tokens)]:
                     return True
+
+        """https://stackoverflow.com/questions/31806695/when-to-use-which-fuzz-function-to-compare-2-strings
+        process.extract('New mRNA molecules', prev_surface_forms,scorer=fuzz.partial_ratio, limit=len(prev_surface_forms))
+        [('New mRNA molecules', 100), ('artificial mRNA molecules', 83), ('mRNA vaccines', 54), ('Bioinformatic Freedom', 33), ('Witnesses', 33), ('biohacking-rights group', 33), ('WBF', 33), ('imagined scenario', 29)]        
+        process.extract('New mRNA molecules', prev_surface_forms,scorer=fuzz.token_set_ratio, limit=len(prev_surface_forms))
+        [('New mRNA molecules', 100), ('artificial mRNA molecules', 88), ('mRNA vaccines', 52), ('imagined scenario', 34), ('Bioinformatic Freedom', 26), ('biohacking-rights group', 24), ('Witnesses', 22), ('WBF', 10)]
+        process.extract('New mRNA molecules', prev_surface_forms,scorer=fuzz.partial_token_set_ratio, limit=len(prev_surface_forms))
+        [('New mRNA molecules', 100), ('artificial mRNA molecules', 100), ('mRNA vaccines', 100), ('imagined scenario', 35), ('Witnesses', 33), ('WBF', 33), ('Bioinformatic Freedom', 29), ('biohacking-rights group', 28)]
+        """
+        #stem = get_stemmer_func(self.language)
+        stem = self.stem_func
+        r = process.extract(candidate_surface_form, prev_surface_forms,scorer=fuzz.partial_ratio, limit=len(prev_surface_forms))
+        rs = [x for x in r if x[1]>fuzz_threshold]
+
+        #if any([rr[1]>80 and len(candidate_surface_form_words)<=len(rr[0].split()) for rr in r]):
+        if len(rs)>0 and any([len(candidate_surface_form_words)<=len(x[0].split()) for x in rs]):
+            # nation , ('Declaration', 83)
+            if len(candidate_surface_form_words)==1 and \
+                all([len(x[0].split())==1 for x in rs]) and \
+                    all([stem(candidate_surface_form).lower()!=stem(x[0]).lower() for x in rs]):
+                #print()
+                #print('不重复：',candidate_surface_form,',',rs) 
+                return False
+            #print()
+            #print('重复：',candidate_surface_form,',',rs)
+            return True
+        
+        #检测后面candidate是否包含前面,且替换
+        #   Waters(或者前面name entity) <--Replace-- Maxine Waters: (name entity)
+        #   time series <--Not-- time series data
+        #   'social cohesion' <--Not-- 'social cohesion unravels'
+        #elif len(rs)>0 and any([len(candidate_surface_form_words)>len(x[0].split()) for x in rs]):
+        if len(rs)>0:
+            replaced = False
+            for x in rs:
+                if len(candidate_surface_form_words)>len(x[0].split()):#需替换
+                    index = prev_surface_forms.index(x[0])
+                    #print()
+                    #print('替换前面：',candidate_surface_form,'-->',prev_surface_forms[index])
+                    prev[index] = candidate
+                    prev_surface_forms[index] = candidate_surface_form
+                    replaced = True
+            if replaced:
+                #查重
+                temp = []
+                for nrb in prev:
+                    if nrb not in temp:
+                        temp.append(nrb)
+                #https://stackoverflow.com/questions/22054698/python-modifying-list-inside-a-function/22055029        
+                prev[:] = temp 
+                temp = []
+                for nrbs in prev_surface_forms:
+                    if nrbs not in temp:
+                        temp.append(nrbs)
+                prev_surface_forms[:] = temp 
+                #continue            
+                return True            
+        """
+        replaced = False
+        for ii,w in enumerate(prev_surface_forms):
+            bsf = candidate_surface_form
+            bsfl = bsf.split()
+            wl = w.split()
+            if any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl))):
+            #if any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl))) and \
+            #    (w in self.ents_list or bsf in self.ents_list):#前或后是entity name才替换
+                #   w    <--?--    bsf
+                prev[ii] = candidate
+                prev_surface_forms[ii] = candidate_surface_form
+                replaced = True
+        if replaced:
+            #查重
+            temp = []
+            for nrb in prev:
+                if nrb not in temp:
+                    temp.append(nrb)
+            prev = temp 
+            temp = []
+            for nrbs in prev_surface_forms:
+                if nrbs not in temp:
+                    temp.append(nrbs)
+            prev_surface_forms = temp 
+            #continue            
+            return True
+        """
         return False
 
     def get_n_best(self, n=10, redundancy_removal=False, stemming=False,
                 surface_form_lowercase=True,
                 del_repeat_letters=True,
-                del_ne_labels=sgzconstant.DEL_NE_LABELS):
+                del_ne_labels=sgzconstant.DEL_NE_LABELS,
+                descending_order=True # YAKE: False, TopicRank/MultipartiteRank: True
+                ):
         """Returns the n-best candidates given the weights.
 
         Args:
@@ -311,14 +403,8 @@ class LoadFile(object):
                 False.
         """
         # sort candidates by descending weight
-        best = sorted(self.weights, key=self.weights.get, reverse=True)
-        #print()
-        #print('get_n_best()---all candidates---',len(best))
-        #print(best)
-        #print(len(self.candidates.keys()))
-        """self.weights
-        {'inflat': 0.059646288645499375, 'us': 0.05018774158352419, 'equiti': 0.025886558913396324, 'good year': 0.02910111112823012}
-        """
+        best = sorted(self.weights, key=self.weights.get, reverse=descending_order)
+
         best_surface_forms = []
         best_pos_dict = {}
         for candidate in best:
@@ -327,9 +413,6 @@ class LoadFile(object):
             best_surface_forms.append(r_count.most_common()[0][0])#candidate_surface_form)
             r_count = Counter([' '.join(w) for w in self.candidates[candidate].pos_patterns])
             best_pos_dict[candidate] = r_count.most_common()[0][0]
-        #print(best_surface_forms) 
-        #print(best_pos)
-        #print()
 
         #去掉单个字符的重复单词，如 xxxx, yyy, aa, bbbbb ^([a-zA-Z])\1{1,}$
         if del_repeat_letters:
@@ -381,22 +464,25 @@ class LoadFile(object):
                         print('        ',best_surface_forms[idx],nelabel)
                         continue
                 """
-                # test wether candidate is redundant
+                # test wether candidate is redundant 
+                # 检测前面candidate是否已包含后面 & 后面candidate是否包含前面且替换
                 if self.is_redundant(candidate,best_surface_forms[idx],
                                     non_redundant_best,non_redundant_best_surface_forms):
                     continue
-                # Waters <--Replace-- Maxine Waters: (name entity)
-                # time series <-- time series data
+                """
+                #检测后面candidate是否包含前面
+                #   Waters(或者前面name entity) <--Replace-- Maxine Waters: (name entity)
+                #   time series <--Not-- time series data
+                #   'social cohesion' <--Not-- 'social cohesion unravels'
                 replaced = False
                 for ii,w in enumerate(non_redundant_best_surface_forms):
                     bsf = best_surface_forms[idx]
                     bsfl = bsf.split()
                     wl = w.split()
-                    #if any(wl==bsfl[j:j+len(wl)] for j in range(len(bsfl))) and bsf in self.ents_list:
-                    #if (bsf in self.ents_list and any(wl==bsfl[j:j+len(wl)] for j in range(len(bsfl)))) or \
-                    #    (bsf not in self.ents_list and any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl)))):
                     if any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl))):
-                        #print('        ',w,'--in-->',best_surface_forms[idx])
+                    #if any(w.lower().split()==bsf.lower().split()[j:j+len(wl)] for j in range(len(bsfl))) and \
+                    #    (w in self.ents_list or bsf in self.ents_list):#前或后是entity name才替换
+                        #   w    <--?--    bsf
                         non_redundant_best[ii] = candidate
                         non_redundant_best_surface_forms[ii] = best_surface_forms[idx]
                         replaced = True
@@ -413,6 +499,7 @@ class LoadFile(object):
                             temp.append(nrbs)
                     non_redundant_best_surface_forms = temp 
                     continue
+                """
                 # add the candidate otherwise
                 non_redundant_best.append(candidate)
                 #get the words from the most occurring surface form
@@ -524,26 +611,15 @@ class LoadFile(object):
 
             # compute the offset shift for the sentence
             shift = sum([s.length for s in self.sentences[0:i]])
-            """shift：单个词的距离（注：不是token）
-                原代码是['Northern','Ireland'],若为['Northern Ireland']-->会导致计算出错！
-                build_topic_graph() weights.append(1.0 / gap)-->fix
-            words: ['Boris Johson','went','to','New York'], [token.text for token in sentence] spacy_doc.sents
-            原代码: self.length = len(words) 修改为--> 
-                    len([w for word in words for w in word.split()])
-            """
-            #print()
-            #print('   --shift-->',i,shift,sentence.words)
-
             # container for the sequence (defined as list of offsets)
             seq = []
-            seq_offset = [] # for ['Northern Ireland'], 原版本['Northern','Ireland']
-            words_num = 0
+            #seq_offset = [] #原版本['Northern','Ireland'] ok, ['Northern Ireland']会有问题
+            #words_num = 0
             # loop through the tokens, key=lambda s: s.pos-->key(self.sentences[i])-->pos[]
-            for j, value in enumerate(key(self.sentences[i])):#['Boris Johson','went','to','New York']
-                token_text = sentence.words[j]#['Boris Johson','went','to','New York']
-                words_num0 = words_num
-                words_num += len(token_text.split())
-                #print(j,token_text,words_num)                
+            for j, value in enumerate(key(self.sentences[i])):
+                #token_text = sentence.words[j]#不会出现['Boris Johson','went','to','New York']
+                #words_num0 = words_num
+                #words_num += len(token_text.split())
                 # add candidate offset in sequence and continue if not last word
                 if value in valid_values:
                     """原有代码 会将name entity与其他可能单词连成一个candidate
@@ -552,7 +628,7 @@ class LoadFile(object):
                         continue                    
                     """
                     seq.append(j)
-                    seq_offset.append(words_num0)
+                    #seq_offset.append(words_num0)
                     #check if including name entity --> try to remove ne from candidate
                     if j == (len(key(self.sentences[i])) - 1): # the last
                         pass
@@ -566,62 +642,52 @@ class LoadFile(object):
                     #Please join MIT SMR authors Bart de Langhe and Stefano Puntoni.
                     #                     dobj    appos --> 不跟前面的word组成keyword phrase
                     # appositional modifier,同位词 
-                    elif sentence.dep[j]=='dobj' and sentence.dep[j+1]=='appos':
+                    elif (sentence.dep[j]=='dobj' or sentence.dep[j]=='pobj') and \
+                        sentence.dep[j+1]=='appos':
                         #print('- - - dobj + appos - - -')
                         #print(token_text,'|',sentence.words[j+1])
                         #print(sentence.words)                        
                         pass
-                    elif len(token_text.split())==1:# single word token不检测是不是name entity
-                        continue
-                    elif token_text in self.ents_list:# this token is name entity
+                    elif (sentence.dep[j]=='dobj' or sentence.dep[j]=='pobj') and \
+                        j+2<len(key(self.sentences[i])) and \
+                            sentence.dep[j+1]=='compound' and \
+                            sentence.dep[j+2]=='appos':
+                        #print('obj, compound, appos:',sentence.words[j:j+3])
                         pass
-                    elif not (sentence.words[j+1] in self.ents_list and 
-                                len(sentence.words[j+1].split())>=2):# next token not name entity(>=2 words)
-                        continue
-                    """    
-                    if token_text in self.ents_list:# this token is name entity
+                    #global tax reform yesterday
+                    #            pobj   npadvmod --> 不跟前面的word组成keyword phrase
+                    elif sentence.dep[j+1]=='npadvmod':#"noun phrase as adverbial modifier"
                         pass
-                    #elif j < (sentence.length - 1):# not name entity, and not the last token
-                    elif j < (len(key(self.sentences[i])) - 1):
-                        if not (sentence.words[j+1] in self.ents_list):# next token not name entity
-                            continue
-                    """
-                    #"""
+                    #elif sentence.dep[j+1]=='nmod':#"modifier of nominal"
+                    #    print('--- ',sentence.dep[j:j+2],sentence.words[j:j+2])
+                    #    continue
+                    else:
+                        continue
+                    #elif len(token_text.split())==1:# single word token不检测是不是name entity
+                    #    continue
+                    #elif token_text in self.ents_list:# this token is name entity
+                    #    pass
+                    #elif not (sentence.words[j+1] in self.ents_list and 
+                    #            len(sentence.words[j+1].split())>=2):# next token not name entity(>=2 words)
+                    #    continue
+
                 # add sequence as candidate if non empty
                 if seq:
-                    #print(sentence.words[seq[0]:seq[-1] + 1])                    
-                    """
-                    tempwords = [w for ww in sentence.words[seq[0]:seq[-1] + 1] for w in ww.split()]
-                    #index_word2token = 
-                    tempindex = []
-                    if len(tempwords)>1:
-                        print(sentence.words[seq[0]:seq[-1] + 1])
-                        print(tempwords)
-                        for ent in self.ents_list:
-                            ent_words = ent.split()
-                            for i in range(len(tempwords)):
-                                if tempwords[i:i+len(ent_words)]==ent_words:
-                                    print(i,',',ent_words)
-                    """
                     # add the ngram to the candidate container
                     temp_offsets = sentence.meta['char_offsets']
-                    #t0 = temp_offsets[0][0]
-                    #temp_offsets = [(t[0]-t0,t[1]-t0) for t in temp_offsets]#按句子归一化offset
                     self.add_candidate(words=sentence.words[seq[0]:seq[-1] + 1],
                                        stems=sentence.stems[seq[0]:seq[-1] + 1],
                                        pos=sentence.pos[seq[0]:seq[-1] + 1],
-                                       #offset=shift + seq[0],
-                                       offset=shift + seq_offset[0],
+                                       offset=shift + seq[0],
+                                       #offset=shift + seq_offset[0],
                                        sentence_id=i,
                                        candidate_char_offset=(temp_offsets[seq[0]][0],temp_offsets[seq[-1]][1])
                                        )
 
                 # flush sequence container
                 seq = []
-                seq_offset = []               
+                #seq_offset = []               
             
-        #print(list(self.candidates))
-        #exit()
 
     def grammar_selection(self, grammar=None):
         """Select candidates using nltk RegexpParser with a grammar defining
@@ -769,7 +835,7 @@ class LoadFile(object):
 
             # get the words from the first occurring surface form
             words = [u.lower() for u in v.surface_forms[0]]
-            newwords = [word for token in words for word in token.split()] #lower case
+            #newwords = [word for token in words for word in token.split()] #lower case
             
             """
             print('-------------------')
@@ -787,9 +853,10 @@ class LoadFile(object):
 
             # discard if words are in the stoplist
             #if set(words).intersection(stoplist):
-            elif discard_stoplist and set(newwords).intersection(stoplist):
-                #print(v.lexical_form,words,newwords)
-                if not any(newwords==ent.lower().split() for ent in self.ents_list): #check if this is NOT a name entity
+            elif discard_stoplist and set(words).intersection(stoplist):
+                #check if this is NOT a name entity
+                #if not any(newwords==ent.lower().split() for ent in self.ents_list): 
+                if not any(words==ent.lower().split() for ent in self.ents_list): 
                     #print('   *** Not a name entity !!! Deleting ***')
                     del self.candidates[k]
 
@@ -798,18 +865,18 @@ class LoadFile(object):
                 del self.candidates[k]
 
             # discard if containing tokens composed of only punctuation
-            #elif any([set(u).issubset(set(punctuation)) for u in words]):
-            elif any([set(u).issubset(set(punctuation)) for u in newwords]):
+            elif any([set(u).issubset(set(punctuation)) for u in words]):
+            #elif any([set(u).issubset(set(punctuation)) for u in newwords]):
                 del self.candidates[k]
 
             # discard candidates composed of 1-2 characters
-            #elif len(''.join(words)) < minimum_length:
-            elif len(''.join(newwords)) < minimum_length:
+            elif len(''.join(words)) < minimum_length:
+            #elif len(''.join(newwords)) < minimum_length:
                 del self.candidates[k]
 
             # discard candidates containing small words (1-character)
-            #elif min([len(u) for u in words]) < minimum_word_size:
-            elif min([len(u) for u in newwords]) < minimum_word_size:
+            elif min([len(u) for u in words]) < minimum_word_size:
+            #elif min([len(u) for u in newwords]) < minimum_word_size:
                 del self.candidates[k]
 
             # discard candidates composed of more than 5 words
@@ -820,6 +887,6 @@ class LoadFile(object):
             # discard if not containing only alpha-numeric characters
             if only_alphanum and k in self.candidates:
                 if not all([self._is_alphanum(w, valid_punctuation_marks)
-                            for w in newwords]):#words]):
+                            for w in words]):
                     del self.candidates[k]
 

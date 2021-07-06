@@ -138,19 +138,9 @@ class MultipartiteRank(TopicRank):
                         gap = abs(p_i - p_j)
                         # alter gap according to candidate length
                         if p_i < p_j:
-                            #gap -= len(self.candidates[node_i].lexical_form) - 1
-                            lf = self.candidates[node_i].lexical_form #['New York','city']
-                            gap -= len([w for word in lf for w in word.split()]) - 1
+                            gap -= len(self.candidates[node_i].lexical_form) - 1
                         if p_j < p_i:
-                            #gap -= len(self.candidates[node_j].lexical_form) - 1
-                            lf = self.candidates[node_j].lexical_form
-                            gap -= len([w for word in lf for w in word.split()]) - 1
-                        """
-                        if gap==0.0:
-                            print()
-                            print('    --node_i-->',p_i,node_i,self.candidates[node_i].lexical_form)
-                            print('    --node_j-->',p_j,node_j,self.candidates[node_j].lexical_form)
-                        """
+                            gap -= len(self.candidates[node_j].lexical_form) - 1
                         weights.append(1.0 / gap)
 
                 # add weighted edges 

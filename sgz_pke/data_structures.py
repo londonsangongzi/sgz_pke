@@ -19,9 +19,10 @@ class Sentence(object):
         self.stems = []
         """list of stems."""
 
-        #['Boris Johson','went','to','New York']
-        #self.length = len(words)
-        self.length = len([w for word in words for w in word.split()])
+        #['Boris Johson','went','to','New York','\n'] length should be 5 or 7 ??
+        self.length = len(words)
+        #self.length = len([w for word in words for w in word.split()]) 会去掉\n
+        #self.length = sum([len(w.split()) if w!='\n' else 1 for w in words])
         """length (number of tokens) of the sentence."""
 
         self.meta = {}

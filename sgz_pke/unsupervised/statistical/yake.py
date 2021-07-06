@@ -131,10 +131,10 @@ class YAKE(LoadFile):
         # loop through sentences
         for i, sentence in enumerate(self.sentences):
 
-            # compute the offset shift for the sentence
+            # compute the (word)offset shift for the sentence
             shift = sum([s.length for s in self.sentences[0:i]])
 
-            j1 = 0 #记录word shift-->替代下面j
+            #j1 = 0 #记录word shift-->替代下面j
 
             # loop through words in sentence
             for j, word in enumerate(sentence.words):
@@ -149,24 +149,27 @@ class YAKE(LoadFile):
                         index = sentence.stems[j]
 
                     # add the word occurrence 原版本
-                    #self.words[index].add((shift + j, shift, i, word))
+                    self.words[index].add((shift + j, shift, i, word))
                     #                word offset in doc, sen's word offset,sen id 
-                    """会有错误！
+                    """会有错误?
                     Donald Trump is good in New York. Will David Beckham come back?
                     {'donald trump': {(0, 0, 0, 'Donald Trump')}, 'is': {(1, 0, 0, 'is')}, 'good': {(2, 0, 0, 'good')}, 
                     'in': {(3, 0, 0, 'in')}, 'new york': {(4, 0, 0, 'New York')}, 'will': {(8, 8, 1, 'Will')}, 
                     'david beckham': {(9, 8, 1, 'David Beckham')}, 'come': {(10, 8, 1, 'come')}, 
                     'back': {(11, 8, 1, 'back')}}
                     """
-                    self.words[index].add((shift + j1, shift, i, word))
+                    #self.words[index].add((shift + j1, shift, i, word))
                     """
                     {'donald trump': {(0, 0, 0, 'Donald Trump')}, 'is': {(2, 0, 0, 'is')}, 'good': {(3, 0, 0, 'good')}, 
                     'in': {(4, 0, 0, 'in')}, 'new york': {(5, 0, 0, 'New York')}, 'will': {(8, 8, 1, 'Will')}, 
                     'david beckham': {(9, 8, 1, 'David Beckham')}, 'come': {(11, 8, 1, 'come')}, 
                     'back': {(12, 8, 1, 'back')}}
                     """
+                #else:
+                #    print('-----------------')
+                #    print(word)
 
-                j1 += len(word.split())
+                #j1 += len(word.split())
 
     def _contexts_building(self, use_stems=False, window=2):
         """Build the contexts of the words for computing the relatedness
@@ -312,15 +315,27 @@ class YAKE(LoadFile):
             # 4. RELATEDNESS feature
             self.features[word]['WL'] = 0.0
             if len(self.contexts[word][0]):
+                #"""old版本 
                 self.features[word]['WL'] = len(set(self.contexts[word][0]))
                 self.features[word]['WL'] /= len(self.contexts[word][0])
+                #"""
+                #self.features[word]['WL'] = len(set([w for ws in self.contexts[word][0] for w in ws.split()]))
+                #self.features[word]['WL'] /= len([w for ws in self.contexts[word][0] for w in ws.split()])
+            #old版本
             self.features[word]['PL'] = len(set(self.contexts[word][0])) / max_TF
+            #self.features[word]['PL'] = len(set([w for ws in self.contexts[word][0] for w in ws.split()])) / max_TF
 
             self.features[word]['WR'] = 0.0
             if len(self.contexts[word][1]):
+                #"""old版本 
                 self.features[word]['WR'] = len(set(self.contexts[word][1]))
                 self.features[word]['WR'] /= len(self.contexts[word][1])
+                #"""
+                #self.features[word]['WR'] = len(set([w for ws in self.contexts[word][1] for w in ws.split()]))
+                #self.features[word]['WR'] /= len([w for ws in self.contexts[word][1] for w in ws.split()])
+            #old版本
             self.features[word]['PR'] = len(set(self.contexts[word][1])) / max_TF
+            #self.features[word]['PR'] = len(set([w for ws in self.contexts[word][1] for w in ws.split()])) / max_TF
 
             self.features[word]['RELATEDNESS'] = 1
             #self.features[word]['RELATEDNESS'] += self.features[word]['PL']
@@ -363,10 +378,12 @@ class YAKE(LoadFile):
         self._vocabulary_building(use_stems=use_stems)
         #print(len(self.words))
         #print(self.words)
-        #exit()
+        #   'united st':{(33, 26, 4, 'United States'), (107, 101, 11, 'United States')}
 
         # extract the contexts
         self._contexts_building(use_stems=use_stems, window=window)
+        #   'growth':(['united st', 'for', 'united st', 'for'],   []     )
+        #                           left 2                       right 2
 
         # compute the word features
         self._feature_extraction(stoplist=stoplist)
@@ -376,12 +393,19 @@ class YAKE(LoadFile):
 
             # use stems
             if use_stems:
-                weights = [self.features[t]['weight'] for t in v.lexical_form]
-                self.weights[k] = numpy.prod(weights)
-                self.weights[k] /= len(v.offsets) * (1 + sum(weights))
-
+                try:
+                    #"""原版本
+                    weights = [self.features[t]['weight'] for t in v.lexical_form]
+                    self.weights[k] = numpy.prod(weights)
+                    self.weights[k] /= len(v.offsets) * (1 + sum(weights))
+                    #"""
+                except Exception as e: #ValueError:
+                    #print(e,str(e))
+                    #print(k)
+                    pass
             # use words
             else:
+                #"""原版本
                 lowercase_forms = [' '.join(t).lower() for t in v.surface_forms]
                 for i, candidate in enumerate(lowercase_forms):
                     TF = lowercase_forms.count(candidate)
@@ -418,6 +442,7 @@ class YAKE(LoadFile):
                     self.weights[candidate] = prod_
                     self.weights[candidate] /= TF * (1 + sum_)
                     self.surface_to_lexical[candidate] = k
+                    #"""
 
                     # weights = [self.features[t.lower()]['weight'] for t
                     #          in v.surface_forms[i]]
